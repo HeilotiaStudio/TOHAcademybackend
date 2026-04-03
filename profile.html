@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Profile - TOH Academy</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+    <style>
+        body { margin: 0; font-family: 'Poppins', sans-serif; }
+        .sidebar { position: fixed; left: 0; top: 0; width: 250px; height: 100vh; background: #1a1a1a; color: #fff; padding: 20px; }
+        .sidebar h2 { color: #FF6600; margin-bottom: 30px; }
+        .sidebar a { display: block; color: #fff; text-decoration: none; padding: 12px 0; transition: 0.3s; }
+        .sidebar a:hover { color: #FF6600; padding-left: 10px; }
+        main { margin-left: 250px; padding: 40px; min-height: 100vh; }
+        .profile-card { background: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px; }
+        .profile-header { display: flex; align-items: center; margin-bottom: 30px; }
+        .profile-img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; margin-right: 30px; }
+        .btn-book { background: #FF6600; color: #fff; border: none; padding: 12px 30px; border-radius: 5px; cursor: pointer; }
+        .btn-book:hover { background: #e55a00; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; }
+        .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; }
+        .close-modal { float: right; font-size: 28px; cursor: pointer; color: #666; }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <h2>TOH Academy</h2>
+        <a href="../index.html">Home</a>
+        <a href="profile.html">My Profile</a>
+        <a href="#">My Courses</a>
+        <a href="#">Settings</a>
+        <a href="#" id="signOutBtn">Sign Out</a>
+    </nav>
+
+    <!-- Main content -->
+    <main>
+        <h1>My Profile</h1>
+        
+        <div class="profile-card">
+            <div class="profile-header">
+                <img src="../img/user.jpg" alt="Profile" class="profile-img">
+                <div>
+                    <h2 id="displayName">John Doe</h2>
+                    <p id="displayEmail">john@example.com</p>
+                    <button class="btn-book" onclick="openCalendar()">Book a Lesson</button>
+                </div>
+            </div>
+
+            <form id="profileForm">
+                <div class="form-group">
+                    <label class="font-weight-bold">Full Name</label>
+                    <input type="text" class="form-control border-0 p-3" id="fullName" placeholder="Full Name" required>
+                </div>
+                <div class="form-group">
+                    <label class="font-weight-bold">Email</label>
+                    <input type="email" class="form-control border-0 p-3" id="email" placeholder="Email" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="font-weight-bold">New Password (leave blank to keep current)</label>
+                    <input type="password" class="form-control border-0 p-3" id="newPassword" placeholder="New Password">
+                </div>
+                <button class="btn btn-primary px-4 py-2" type="submit">Update Profile</button>
+            </form>
+        </div>
+    </main>
+
+    <!-- Calendar Modal -->
+    <div id="calendarModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeCalendar()">&times;</span>
+            <h3>Book a Lesson</h3>
+            <div id="calendar-root"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        window.supabase = supabase.createClient(
+            "https://hpribgbrwyljorezjwsp.supabase.co",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwcmliZ2Jyd3lsam9yZXpqd3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4ODYzNzUsImV4cCI6MjA4MDQ2MjM3NX0.SmjSKDXGD4WeLvNQooBuV9ZkihATaz4cUXt39_IQMss"
+        );
+
+        // Auth guard
+        const student = JSON.parse(sessionStorage.getItem('student'));
+        if (!student) window.location.href = 'signin.html';
+
+        // Populate profile from session
+        document.getElementById('displayName').textContent = student.name;
+        document.getElementById('displayEmail').textContent = student.email;
+        document.getElementById('fullName').value = student.name;
+        document.getElementById('email').value = student.email;
+
+        document.getElementById('signOutBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            sessionStorage.removeItem('student');
+            window.location.href = 'signin.html';
+        });
+
+        document.getElementById('profileForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('fullName').value.trim();
+            const btn  = this.querySelector('button[type="submit"]');
+
+            btn.textContent = 'Saving...';
+            btn.disabled = true;
+
+            const { error } = await window.supabase
+                .from('students')
+                .update({ name })
+                .eq('email', student.email);
+
+            if (error) {
+                alert('Error updating profile: ' + error.message);
+            } else {
+                student.name = name;
+                sessionStorage.setItem('student', JSON.stringify(student));
+                document.getElementById('displayName').textContent = name;
+            }
+
+            btn.textContent = 'Saved!';
+            setTimeout(() => { btn.textContent = 'Update Profile'; btn.disabled = false; }, 2000);
+        });
+    </script>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        function Calendar() {
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [selectedTime, setSelectedTime] = useState(null);
+            const [msg, setMsg] = useState('');
+
+            const times = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+
+            const handleBook = async () => {
+                if (!selectedDate || !selectedTime) return;
+                const d = new Date(selectedDate);
+                const { error } = await window.supabase.from('bookings').insert({
+                    student_id: null,
+                    course: student.course,
+                    day: d.getDate(),
+                    month: d.getMonth() + 1,
+                    year: d.getFullYear(),
+                    time: selectedTime,
+                    status: 'pending'
+                });
+                if (error) {
+                    setMsg('Booking failed: ' + error.message);
+                } else {
+                    setMsg('Booking confirmed for ' + selectedDate + ' at ' + selectedTime);
+                    setTimeout(() => closeCalendar(), 2000);
+                }
+            };
+
+            return (
+                <div>
+                    <div style={{marginBottom:'20px'}}>
+                        <label style={{display:'block',marginBottom:'10px',fontWeight:'bold'}}>Select Date:</label>
+                        <input type="date" style={{width:'100%',padding:'10px',border:'1px solid #ddd',borderRadius:'5px'}}
+                            onChange={e => setSelectedDate(e.target.value)} />
+                    </div>
+                    <div style={{marginBottom:'20px'}}>
+                        <label style={{display:'block',marginBottom:'10px',fontWeight:'bold'}}>Select Time:</label>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
+                            {times.map(time => (
+                                <button key={time} type="button" onClick={() => setSelectedTime(time)}
+                                    style={{padding:'10px',border:selectedTime===time?'2px solid #FF6600':'1px solid #ddd',
+                                        background:selectedTime===time?'#fff5f0':'#fff',borderRadius:'5px',cursor:'pointer'}}>
+                                    {time}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {msg && <p style={{color:'#FF6600',textAlign:'center'}}>{msg}</p>}
+                    <button onClick={handleBook}
+                        style={{width:'100%',padding:'12px',background:'#FF6600',color:'#fff',border:'none',borderRadius:'5px',cursor:'pointer',fontSize:'16px'}}>
+                        Confirm Booking
+                    </button>
+                </div>
+            );
+        }
+
+        function openCalendar() {
+            document.getElementById('calendarModal').style.display = 'block';
+            ReactDOM.render(<Calendar />, document.getElementById('calendar-root'));
+        }
+
+        function closeCalendar() {
+            document.getElementById('calendarModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

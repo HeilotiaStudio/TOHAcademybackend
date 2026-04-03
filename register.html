@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Register - TOH Academy</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+    <style>
+        .captcha-box { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+        .captcha-box p { font-size: 0.82rem; color: #555; margin-bottom: 10px; text-align: center; }
+        .captcha-images { display: flex; gap: 8px; justify-content: center; }
+        .captcha-images img { width: 100px; height: 70px; object-fit: cover; border-radius: 5px; border: 2px solid transparent; cursor: grab; transition: border 0.2s, transform 0.2s; }
+        .captcha-images img.drag-over { border-color: #FF6600; transform: scale(1.05); }
+        .captcha-images img.dragging { opacity: 0.4; }
+        .captcha-error { color: #dc3545; font-size: 0.8rem; text-align: center; margin-top: 6px; display: none; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+        .shake { animation: shake 0.3s ease; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid d-flex align-items-center justify-content-center" style="min-height: 100vh; background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('../img/carousel-2.jpg') center center no-repeat; background-size: cover;">
+        <div class="card border-0" style="max-width: 450px; width: 100%;">
+            <div class="card-header bg-primary text-center p-4">
+                <h2 class="text-white m-0">Register</h2>
+            </div>
+            <div class="card-body bg-secondary p-5">
+                <form id="registerForm" onsubmit="return validateCaptcha(event)">
+                    <div class="form-group">
+                        <input type="text" class="form-control border-0 p-4" id="fullName" placeholder="Full Name" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="email" class="form-control border-0 p-4" id="email" placeholder="Email" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="password" class="form-control border-0 p-4" id="password" placeholder="Password" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="password" class="form-control border-0 p-4" id="confirmPassword" placeholder="Confirm Password" required>
+                    </div>
+                    <div class="form-group">
+                        <select class="form-control border-0 p-4" id="course" required>
+                            <option value="">Select a Course</option>
+                            <option value="Web Dev - HTML/CSS">Web Development (HTML, CSS, PHP)</option>
+                            <option value="React + Node.js">Web Development (React + Node.js)</option>
+                            <option value="C# & ASP.NET">Web Development (C# & ASP.NET)</option>
+                            <option value="Unity Game Dev">Game Development with Unity</option>
+                            <option value="Python & AI">Web Development with Python & AI</option>
+                            <option value="Cybersecurity">Cybersecurity Fundamentals</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <div class="captcha-box">
+                            <p>Sort from <strong>fewest</strong> to <strong>most</strong> people, left to right</p>
+                            <div class="captcha-images" id="captchaSlots">
+                                <img src="../img/team-1.jpg" alt="1 person" data-id="1" draggable="true">
+                                <img src="../img/cat-5.jpg" alt="3 people" data-id="2" draggable="true">
+                                <img src="../img/cat-6.jpg" alt="6 people" data-id="3" draggable="true">
+                            </div>
+                            <div class="captcha-error" id="captchaError">Incorrect order — please try again</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-block border-0 py-3" type="submit">Register</button>
+                </form>
+                <div class="text-center mt-3">
+                    <span>Already have an account? </span><a href="signin.html" class="text-primary">Sign In</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const CORRECT_ORDER = ['1','2','3'];
+        let dragSrc = null;
+
+        function initCaptcha() {
+            const slots = document.getElementById('captchaSlots');
+            const imgs = [...slots.querySelectorAll('img')].sort(() => Math.random() - 0.5);
+            slots.innerHTML = '';
+            imgs.forEach(img => {
+                slots.appendChild(img);
+                img.addEventListener('dragstart', e => { dragSrc = img; img.classList.add('dragging'); });
+                img.addEventListener('dragend',   e => img.classList.remove('dragging'));
+                img.addEventListener('dragover',  e => { e.preventDefault(); img.classList.add('drag-over'); });
+                img.addEventListener('dragleave', e => img.classList.remove('drag-over'));
+                img.addEventListener('drop', e => {
+                    e.preventDefault();
+                    img.classList.remove('drag-over');
+                    if (dragSrc && dragSrc !== img) {
+                        const allImgs = [...slots.querySelectorAll('img')];
+                        const fromIdx = allImgs.indexOf(dragSrc);
+                        const toIdx   = allImgs.indexOf(img);
+                        if (fromIdx < toIdx) slots.insertBefore(dragSrc, img.nextSibling);
+                        else slots.insertBefore(dragSrc, img);
+                    }
+                });
+            });
+        }
+
+        function verifyCaptcha() {
+            const order = [...document.querySelectorAll('#captchaSlots img')].map(i => i.dataset.id);
+            return JSON.stringify(order) === JSON.stringify(CORRECT_ORDER);
+        }
+
+        initCaptcha();
+
+        const db = supabase.createClient(
+            "https://hpribgbrwyljorezjwsp.supabase.co",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwcmliZ2Jyd3lsam9yZXpqd3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4ODYzNzUsImV4cCI6MjA4MDQ2MjM3NX0.SmjSKDXGD4WeLvNQooBuV9ZkihATaz4cUXt39_IQMss"
+        );
+
+        async function validateCaptcha(event) {
+            event.preventDefault();
+            const errEl = document.getElementById('captchaError');
+
+            if (!verifyCaptcha()) {
+                errEl.style.display = 'block';
+                document.getElementById('captchaSlots').classList.add('shake');
+                setTimeout(() => document.getElementById('captchaSlots').classList.remove('shake'), 400);
+                initCaptcha();
+                return;
+            }
+            errEl.style.display = 'none';
+
+            const name     = document.getElementById('fullName').value.trim();
+            const email    = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const confirm  = document.getElementById('confirmPassword').value;
+            const course   = document.getElementById('course').value;
+
+            if (password !== confirm) { alert('Passwords do not match'); return; }
+            if (!course) { alert('Please select a course'); return; }
+
+            const btn = document.querySelector('button[type="submit"]');
+            btn.textContent = 'Registering...';
+            btn.disabled = true;
+
+            const { data, error } = await db.rpc('register_student', {
+                p_name: name,
+                p_email: email,
+                p_password: password,
+                p_course: course
+            });
+
+            if (error) {
+                alert(error.message.includes('unique') ? 'Email already registered.' : 'Error: ' + error.message);
+                btn.textContent = 'Register';
+                btn.disabled = false;
+                initCaptcha();
+                return;
+            }
+
+            sessionStorage.setItem('student', JSON.stringify({ name, email, course }));
+            window.location.href = 'profile.html';
+        }
+    </script>
+</body>
+</html>
