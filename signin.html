@@ -45,7 +45,7 @@
                             <div class="captcha-error" id="captchaError">Incorrect order — please try again</div>
                         </div>
                     </div>
-                    <button class="btn btn-primary btn-block border-0 py-3" type="submit">Sign In</button>
+                    <button class="btn btn-primary btn-block border-0 py-3" type="signinStudent()">Sign In</button>
                 </form>
                 <div class="text-center mt-3">
                     <a href="forgot-password.html" class="text-primary">Forgot Password?</a>
@@ -59,6 +59,31 @@
    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
+<script>
+async function signinStudent() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  const url = "https://lsfkeyjvulvbherwmbbu.supabase.co/functions/v1/signin-student";
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+
+  const json = await res.json();
+  console.log(json);
+
+  if (json.success) {
+    alert("Signed in!");
+    // json.data contains student info
+  } else {
+    alert(json.error || "Sign in failed");
+  }
+}
+</script>
+
 
 <script>
     // Drag CAPTCHA — correct order is 1,2,3
@@ -113,21 +138,7 @@
         const email    = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
 
-        // 🔥 CALL YOUR EDGE FUNCTION INSTEAD OF RPC
-        const res = await fetch(
-            "https://lsfkeyjvulvbherwmbbu.supabase.co/functions/v1/signin-student",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer YOUR_ANON_KEY_HERE"
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: password
-                })
-            }
-        );
+     
 
         const data = await res.json();
 
