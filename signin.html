@@ -84,75 +84,114 @@ async function signinStudent() {
 }
 </script>
 
-
 <script>
-    // Drag CAPTCHA — correct order is 1,2,3
-    const CORRECT_ORDER = ['1','2','3'];
-    let dragSrc = null;
+/* -----------------------------
+   CAPTCHA LOGIC
+------------------------------*/
+const CORRECT_ORDER = ['1','2','3'];
+let dragSrc = null;
 
-    function initCaptcha() {
-        const slots = document.getElementById('captchaSlots');
-        const imgs = [...slots.querySelectorAll('img')].sort(() => Math.random() - 0.5);
-        slots.innerHTML = '';
-        imgs.forEach(img => {
-            slots.appendChild(img);
-            img.addEventListener('dragstart', e => { dragSrc = img; img.classList.add('dragging'); });
-            img.addEventListener('dragend',   e => img.classList.remove('dragging'));
-            img.addEventListener('dragover',  e => { e.preventDefault(); img.classList.add('drag-over'); });
-            img.addEventListener('dragleave', e => img.classList.remove('drag-over'));
-            img.addEventListener('drop', e => {
-                e.preventDefault();
-                img.classList.remove('drag-over');
-                if (dragSrc && dragSrc !== img) {
-                    const allImgs = [...slots.querySelectorAll('img')];
-                    const fromIdx = allImgs.indexOf(dragSrc);
-                    const toIdx   = allImgs.indexOf(img);
-                    if (fromIdx < toIdx) slots.insertBefore(dragSrc, img.nextSibling);
-                    else slots.insertBefore(dragSrc, img);
-                }
-            });
+function initCaptcha() {
+    const slots = document.getElementById('captchaSlots');
+    const imgs = [...slots.querySelectorAll('img')].sort(() => Math.random() - 0.5);
+
+    slots.innerHTML = '';
+
+    imgs.forEach(img => {
+        slots.appendChild(img);
+
+        img.addEventListener('dragstart', () => {
+            dragSrc = img;
+            img.classList.add('dragging');
         });
-    }
 
-    function verifyCaptcha() {
-        const order = [...document.querySelectorAll('#captchaSlots img')].map(i => i.dataset.id);
-        return JSON.stringify(order) === JSON.stringify(CORRECT_ORDER);
-    }
+        img.addEventListener('dragend', () => img.classList.remove('dragging'));
 
-    initCaptcha();
+        img.addEventListener('dragover', e => {
+            e.preventDefault();
+            img.classList.add('drag-over');
+        });
 
-    async function validateCaptcha(event) {
-        event.preventDefault();
-        const errEl = document.getElementById('captchaError');
+        img.addEventListener('dragleave', () => img.classList.remove('drag-over'));
 
-        if (!verifyCaptcha()) {
-            errEl.style.display = 'block';
-            document.getElementById('captchaSlots').classList.add('shake');
-            setTimeout(() => document.getElementById('captchaSlots').classList.remove('shake'), 400);
-            initCaptcha();
-            return;
-        }
+        img.addEventListener('drop', e => {
+            e.preventDefault();
+            img.classList.remove('drag-over');
 
-        errEl.style.display = 'none';
+            if (dragSrc && dragSrc !== img) {
+                const allImgs = [...slots.querySelectorAll('img')];
+                const fromIdx = allImgs.indexOf(dragSrc);
+                const toIdx   = allImgs.indexOf(img);
 
-        const email    = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
+                if (fromIdx < toIdx) slots.insertBefore(dragSrc, img.nextSibling);
+                else slots.insertBefore(dragSrc, img);
+            }
+        });
+    });
+}
 
-     
+function verifyCaptcha() {
+    const order = [...document.querySelectorAll('#captchaSlots img')].map(i => i.dataset.id);
+    return JSON.stringify(order) === JSON.stringify(CORRECT_ORDER);
+}
 
-        const data = await res.json();
+initCaptcha();
 
-        if (!res.ok || !data || data.error) {
-            alert("Invalid email or password.");
-            initCaptcha();
-            return;
-        }
+/* -----------------------------
+   SIGN-IN FUNCTION (Edge Function)
+------------------------------*/
+async function signinStudent() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
 
-        // Save student session
-        sessionStorage.setItem("student", JSON.stringify(data));
+    const url = "https://lsfkeyjvulvbherwmbbu.supabase.co/functions/v1/signin-student";
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+    });
+
+    const json = await res.json();
+    console.log(json);
+
+    if (json.success) {
+        sessionStorage.setItem("student", JSON.stringify(json.data));
         window.location.href = "profile.html";
+    } else {
+        alert(json.error || "Invalid email or password.");
+        initCaptcha();
     }
+}
+
+/* -----------------------------
+   CAPTCHA + SIGN-IN FLOW
+------------------------------*/
+async function validateCaptcha(event) {
+    event.preventDefault();
+    const errEl = document.getElementById('captchaError');
+
+    if (!verifyCaptcha()) {
+        errEl.style.display = 'block';
+        document.getElementById('captchaSlots').classList.add('shake');
+
+        setTimeout(() => {
+            document.getElementById('captchaSlots').classList.remove('shake');
+        }, 400);
+
+        initCaptcha();
+        return;
+    }
+
+    errEl.style.display = 'none';
+
+    // CAPTCHA passed → now sign in
+    await signinStudent();
+}
 </script>
+
+
+
 
 
 </body>
