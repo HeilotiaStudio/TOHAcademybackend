@@ -82,11 +82,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-// Supabase configuration - using a different variable name to avoid conflicts
+// Supabase configuration
 const SB_URL = "https://lsfkeyjvulvbherwmbbu.supabase.co";
 const SB_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I";
 
-// Create supabase client with a unique name
 const supabaseClient = window.supabase.createClient(SB_URL, SB_ANON_KEY);
 
 /* -----------------------------
@@ -142,12 +141,42 @@ function verifyCaptcha() {
 initCaptcha();
 
 /* -----------------------------
+   HELPER: Check if email exists (returns true/false only - no data exposed)
+------------------------------*/
+async function emailExistsInTable(tableName, email) {
+    try {
+        const { data, error } = await supabaseClient
+            .from(tableName)
+            .select('email')
+            .eq('email', email)
+            .maybeSingle();
+        
+        if (error) {
+            console.log(`Error checking ${tableName}:`, error);
+            return false;
+        }
+        return !!data;
+    } catch (error) {
+        console.error(`Error checking ${tableName}:`, error);
+        return false;
+    }
+}
+
+/* -----------------------------
    TEACHER SIGN-IN (Supabase Auth)
 ------------------------------*/
 async function signinTeacher(email, password) {
     try {
         console.log("Attempting teacher sign-in with Supabase Auth...");
         
+        // First, check if email exists in teachers table
+        const exists = await emailExistsInTable('teachers', email);
+        if (!exists) {
+            console.log("Email not found in teachers table");
+            return null;
+        }
+        
+        // Authenticate with Supabase Auth
         const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: email,
             password: password
@@ -159,9 +188,9 @@ async function signinTeacher(email, password) {
         }
 
         if (data && data.user) {
-            console.log("Teacher authenticated:", data.user);
+            console.log("Teacher authenticated successfully");
             
-            // Get teacher info from teachers table
+            // Get additional teacher info from teachers table
             const { data: teacherData, error: teacherError } = await supabaseClient
                 .from('teachers')
                 .select('*')
@@ -169,20 +198,25 @@ async function signinTeacher(email, password) {
                 .single();
             
             if (teacherError) {
-                console.log("Teacher not found in teachers table:", teacherError);
-                // Still return basic user info
+                console.log("Could not fetch teacher details:", teacherError);
+                // Return basic info if teacher table fetch fails
                 return {
                     id: data.user.id,
-                    name: data.user.email?.split('@')[0] || 'Teacher',
-                    email: data.user.email,
+                    name: email.split('@')[0],
+                    email: email,
                     role: 'Teacher',
                     isTeacher: true
                 };
             }
             
+            // Return combined teacher data
             return {
-                ...teacherData,
                 id: data.user.id,
+                name: teacherData.name,
+                email: teacherData.email,
+                role: teacherData.role,
+                bio: teacherData.bio,
+                avatar_url: teacherData.avatar_url,
                 isTeacher: true
             };
         }
@@ -195,12 +229,20 @@ async function signinTeacher(email, password) {
 }
 
 /* -----------------------------
-   STUDENT SIGN-IN (Custom RPC)
+   STUDENT SIGN-IN (Custom RPC with hashed passwords)
 ------------------------------*/
 async function signinStudent(email, password) {
     try {
         console.log("Attempting student sign-in with RPC...");
         
+        // First, check if email exists in students table
+        const exists = await emailExistsInTable('students', email);
+        if (!exists) {
+            console.log("Email not found in students table");
+            return null;
+        }
+        
+        // Call the secure RPC function (checks hashed password server-side)
         const { data, error } = await supabaseClient.rpc('signin_student', {
             p_email: email,
             p_password: password
@@ -212,15 +254,19 @@ async function signinStudent(email, password) {
         }
 
         if (!data || (Array.isArray(data) && data.length === 0)) {
-            console.log("No student found with these credentials");
+            console.log("Invalid password for student");
             return null;
         }
 
         const studentData = Array.isArray(data) && data.length > 0 ? data[0] : data;
-        console.log("Student authenticated:", studentData);
+        console.log("Student authenticated successfully");
         
         return {
-            ...studentData,
+            id: studentData.id,
+            name: studentData.name,
+            email: studentData.email,
+            course: studentData.course,
+            joined_at: studentData.joined_at,
             isTeacher: false
         };
     } catch (error) {
@@ -245,29 +291,49 @@ async function handleSignIn() {
     document.getElementById('loadingOverlay').style.display = 'flex';
     
     try {
-        // First, try teacher sign-in (for @tohacademy.com emails)
-        if (email.includes('@tohacademy.com')) {
-            console.log("Teacher email detected");
+        // Check which table the email belongs to (without exposing data)
+        const isTeacher = await emailExistsInTable('teachers', email);
+        const isStudent = await emailExistsInTable('students', email);
+        
+        console.log("Email found in - Teacher:", isTeacher, "Student:", isStudent);
+        
+        if (!isTeacher && !isStudent) {
+            alert("No account found with this email. Please register first.");
+            initCaptcha();
+            return null;
+        }
+        
+        // Try teacher sign-in first (if email is in teachers table)
+        if (isTeacher) {
+            console.log("Attempting teacher authentication...");
             const teacher = await signinTeacher(email, password);
             if (teacher) {
+                // Store in sessionStorage
                 sessionStorage.setItem('user', JSON.stringify(teacher));
                 sessionStorage.setItem('userType', 'teacher');
                 return teacher;
             }
+            // If teacher email but wrong password, don't try student
+            alert("Invalid password for teacher account.");
+            initCaptcha();
+            return null;
         }
         
-        // Try student sign-in
-        console.log("Trying student sign-in");
-        const student = await signinStudent(email, password);
-        if (student) {
-            sessionStorage.setItem('user', JSON.stringify(student));
-            sessionStorage.setItem('userType', 'student');
-            return student;
+        // Try student sign-in (if email is in students table)
+        if (isStudent) {
+            console.log("Attempting student authentication...");
+            const student = await signinStudent(email, password);
+            if (student) {
+                // Store in sessionStorage
+                sessionStorage.setItem('user', JSON.stringify(student));
+                sessionStorage.setItem('userType', 'student');
+                return student;
+            }
+            alert("Invalid password for student account.");
+            initCaptcha();
+            return null;
         }
         
-        // If neither worked
-        alert("Invalid email or password. Please try again.");
-        initCaptcha();
         return null;
         
     } catch (error) {
@@ -305,7 +371,7 @@ async function validateCaptcha(event) {
     const user = await handleSignIn();
     
     if (user) {
-        console.log("Sign-in successful, redirecting...", user);
+        console.log("Sign-in successful, redirecting...");
         
         // Redirect based on user type
         if (user.isTeacher) {
