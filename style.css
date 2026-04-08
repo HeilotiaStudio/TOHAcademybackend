@@ -42,6 +42,17 @@
   box-sizing: border-box;
 }
 
+.page-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 30px; 
+}
+.page-header h1 { 
+    margin: 0; 
+    color: #FF6600;  /* Add this line */
+}
+
 /* Calendar navigation buttons - Force orange color */
 .cal-nav button {
     background: #FF6600 !important;
