@@ -18,10 +18,19 @@
         .captcha-error { color: #dc3545; font-size: 0.8rem; text-align: center; margin-top: 6px; display: none; }
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
         .shake { animation: shake 0.3s ease; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 9999; }
+        .loading-spinner { color: white; font-size: 24px; }
     </style>
 </head>
 
 <body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p style="margin-top: 10px;">Signing in...</p>
+        </div>
+    </div>
+
     <div class="container-fluid d-flex align-items-center justify-content-center"
          style="min-height: 100vh; background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('../img/carousel-1.jpg') center center no-repeat; background-size: cover;">
 
@@ -132,56 +141,141 @@ function verifyCaptcha() {
 initCaptcha();
 
 /* -----------------------------
-   SIGN-IN FUNCTION (Direct RPC Call)
+   TEACHER SIGN-IN (Supabase Auth)
 ------------------------------*/
-async function signinStudent() {
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
-
-    if (!email || !password) {
-        alert("Please enter email and password");
-        return;
-    }
-
+async function signinTeacher(email, password) {
     try {
-        console.log("Calling signin_student RPC for:", email);
+        console.log("Attempting teacher sign-in with Supabase Auth...");
         
-        // Call the RPC function directly
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+
+        if (error) {
+            console.log("Teacher auth failed:", error.message);
+            return null;
+        }
+
+        if (data && data.user) {
+            console.log("Teacher authenticated:", data.user);
+            
+            // Get teacher info from teachers table
+            const { data: teacherData, error: teacherError } = await supabase
+                .from('teachers')
+                .select('*')
+                .eq('email', email)
+                .single();
+            
+            if (teacherError) {
+                console.log("Teacher not found in teachers table:", teacherError);
+                // Still return basic user info
+                return {
+                    id: data.user.id,
+                    name: data.user.email?.split('@')[0] || 'Teacher',
+                    email: data.user.email,
+                    role: 'Teacher',
+                    isTeacher: true
+                };
+            }
+            
+            return {
+                ...teacherData,
+                id: data.user.id,
+                isTeacher: true
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error("Teacher sign-in error:", error);
+        return null;
+    }
+}
+
+/* -----------------------------
+   STUDENT SIGN-IN (Custom RPC)
+------------------------------*/
+async function signinStudent(email, password) {
+    try {
+        console.log("Attempting student sign-in with RPC...");
+        
         const { data, error } = await supabase.rpc('signin_student', {
             p_email: email,
             p_password: password
         });
 
-        console.log("RPC Response:", { data, error });
-
         if (error) {
-            console.error("RPC Error:", error);
-            alert("Login error: " + error.message);
-            initCaptcha();
-            return;
+            console.log("Student RPC error:", error);
+            return null;
         }
 
         if (!data || (Array.isArray(data) && data.length === 0)) {
-            alert("Invalid email or password");
-            initCaptcha();
-            return;
+            console.log("No student found with these credentials");
+            return null;
         }
 
-        // Get the student data (first item if array)
         const studentData = Array.isArray(data) && data.length > 0 ? data[0] : data;
+        console.log("Student authenticated:", studentData);
         
-        console.log("Student logged in:", studentData);
+        return {
+            ...studentData,
+            isTeacher: false
+        };
+    } catch (error) {
+        console.error("Student sign-in error:", error);
+        return null;
+    }
+}
+
+/* -----------------------------
+   MAIN SIGN-IN FUNCTION
+------------------------------*/
+async function handleSignIn() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!email || !password) {
+        alert("Please enter email and password");
+        return null;
+    }
+
+    // Show loading overlay
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    try {
+        // First, try teacher sign-in (for @tohacademy.com emails)
+        if (email.includes('@tohacademy.com')) {
+            console.log("Teacher email detected");
+            const teacher = await signinTeacher(email, password);
+            if (teacher) {
+                sessionStorage.setItem('user', JSON.stringify(teacher));
+                sessionStorage.setItem('userType', 'teacher');
+                return teacher;
+            }
+        }
         
-        // Store in sessionStorage
-        sessionStorage.setItem("student", JSON.stringify(studentData));
+        // Try student sign-in
+        console.log("Trying student sign-in");
+        const student = await signinStudent(email, password);
+        if (student) {
+            sessionStorage.setItem('user', JSON.stringify(student));
+            sessionStorage.setItem('userType', 'student');
+            return student;
+        }
         
-        // Redirect to profile
-        window.location.href = "profile.html";
+        // If neither worked
+        alert("Invalid email or password. Please try again.");
+        initCaptcha();
+        return null;
         
     } catch (error) {
         console.error("Sign-in error:", error);
         alert("Network error. Please try again.");
         initCaptcha();
+        return null;
+    } finally {
+        document.getElementById('loadingOverlay').style.display = 'none';
     }
 }
 
@@ -206,8 +300,19 @@ async function validateCaptcha(event) {
 
     errEl.style.display = 'none';
 
-    // CAPTCHA passed → now sign in
-    await signinStudent();
+    // Sign in
+    const user = await handleSignIn();
+    
+    if (user) {
+        console.log("Sign-in successful, redirecting...", user);
+        
+        // Redirect based on user type
+        if (user.isTeacher) {
+            window.location.href = "admin-profile.html";
+        } else {
+            window.location.href = "profile.html";
+        }
+    }
 }
 </script>
 
