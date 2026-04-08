@@ -8,8 +8,6 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
     <link href="https://tohbackend.netlify.app/style.css" rel="stylesheet">
 
-    <meta name="vapid-public-key" content="BPsGbP0ag4TUx2CUUm81mUj3k7pN7oU95Pdn0vqd7zAXyt-SN4wIDmDFLdpXB_y4u-zS9qpxphxYNtOw3cBfk68">
-
     <style>
         .captcha-box { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
         .captcha-box p { font-size: 0.82rem; color: #555; margin-bottom: 10px; text-align: center; }
@@ -72,8 +70,15 @@
 
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
+// Supabase configuration
+const SUPABASE_URL = "https://lsfkeyjvulvbherwmbbu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 /* -----------------------------
    CAPTCHA LOGIC
 ------------------------------*/
@@ -127,28 +132,55 @@ function verifyCaptcha() {
 initCaptcha();
 
 /* -----------------------------
-   SIGN-IN FUNCTION (Edge Function)
+   SIGN-IN FUNCTION (Direct RPC Call)
 ------------------------------*/
 async function signinStudent() {
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
 
-    const url = "https://lsfkeyjvulvbherwmbbu.supabase.co/functions/v1/signin-student";
+    if (!email || !password) {
+        alert("Please enter email and password");
+        return;
+    }
 
-    const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-    });
+    try {
+        console.log("Calling signin_student RPC for:", email);
+        
+        // Call the RPC function directly
+        const { data, error } = await supabase.rpc('signin_student', {
+            p_email: email,
+            p_password: password
+        });
 
-    const json = await res.json();
-    console.log(json);
+        console.log("RPC Response:", { data, error });
 
-    if (json.success) {
-        sessionStorage.setItem("student", JSON.stringify(json.data));
+        if (error) {
+            console.error("RPC Error:", error);
+            alert("Login error: " + error.message);
+            initCaptcha();
+            return;
+        }
+
+        if (!data || (Array.isArray(data) && data.length === 0)) {
+            alert("Invalid email or password");
+            initCaptcha();
+            return;
+        }
+
+        // Get the student data (first item if array)
+        const studentData = Array.isArray(data) && data.length > 0 ? data[0] : data;
+        
+        console.log("Student logged in:", studentData);
+        
+        // Store in sessionStorage
+        sessionStorage.setItem("student", JSON.stringify(studentData));
+        
+        // Redirect to profile
         window.location.href = "profile.html";
-    } else {
-        alert(json.error || "Invalid email or password.");
+        
+    } catch (error) {
+        console.error("Sign-in error:", error);
+        alert("Network error. Please try again.");
         initCaptcha();
     }
 }
