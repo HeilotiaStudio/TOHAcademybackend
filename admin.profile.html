@@ -83,10 +83,18 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
+        // CORRECTED Supabase credentials for your project
         window.supabase = supabase.createClient(
-            "https://hpribgbrwyljorezjwsp.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwcmliZ2Jyd3lsam9yZXpqd3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4ODYzNzUsImV4cCI6MjA4MDQ2MjM3NX0.SmjSKDXGD4WeLvNQooBuV9ZkihATaz4cUXt39_IQMss"
+            "https://lsfkeyjvulvbherwmbbu.supabase.co",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I"
         );
+        
+        // Test the connection
+        window.supabase.from('students').select('count', { count: 'exact', head: true })
+            .then(({ count, error }) => {
+                if (error) console.error("Supabase connection error:", error);
+                else console.log("Supabase connected! Students count:", count);
+            });
     </script>
 
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -105,17 +113,6 @@
         { id: 6, img: '../img/course-6.jpg', title: 'Cybersecurity Fundamentals in age of AI', students: 7,  duration: '1h 30m', rating: '4.5', reviews: 4  },
     ];
 
-    const bookings = [
-        { id: 1, student: 'Anna Bērziņa',      course: 'Web Dev - HTML/CSS', day: 3,  time: '10:00', status: 'confirmed' },
-        { id: 2, student: 'Jānis Kalniņš',     course: 'Unity Game Dev',     day: 3,  time: '14:00', status: 'pending'   },
-        { id: 3, student: 'Laura Ozola',        course: 'Python & AI',        day: 7,  time: '09:00', status: 'confirmed' },
-        { id: 4, student: 'Mārtiņš Liepa',     course: 'React + Node.js',    day: 10, time: '11:00', status: 'confirmed' },
-        { id: 5, student: 'Elīna Zariņa',      course: 'Cybersecurity',      day: 14, time: '15:00', status: 'pending'   },
-        { id: 6, student: 'Rihards Vītols',    course: 'Unity Game Dev',     day: 17, time: '10:00', status: 'confirmed' },
-        { id: 7, student: 'Kristīne Ādamsone', course: 'C# & ASP.NET',       day: 21, time: '14:00', status: 'cancelled' },
-        { id: 8, student: 'Toms Freibergs',    course: 'Web Dev - HTML/CSS', day: 24, time: '16:00', status: 'confirmed' },
-    ];
-
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
     function StudentsView() {
@@ -126,14 +123,20 @@
         useEffect(() => {
             window.supabase.from('students').select('*').order('id')
                 .then(({ data, error }) => {
-                    if (error) setError(error.message);
-                    else setStudents(data);
+                    if (error) {
+                        console.error("Error fetching students:", error);
+                        setError(error.message);
+                    } else {
+                        console.log("Students loaded:", data);
+                        setStudents(data || []);
+                    }
                     setLoading(false);
                 });
         }, []);
 
         if (loading) return <div className="page-header"><p>Loading students...</p></div>;
         if (error)   return <div className="page-header"><p style={{color:'red'}}>Error: {error}</p></div>;
+        if (!students || students.length === 0) return <div className="page-header"><p>No students found.</p></div>;
 
         return (
             <div>
@@ -195,9 +198,25 @@
     }
 
     function BookingsView() {
+        const [allBookings, setAllBookings] = useState([]);
+        const [loading, setLoading] = useState(true);
         const today = new Date();
         const [current, setCurrent] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
         const [modal, setModal] = useState(null);
+
+        useEffect(() => {
+            // Fetch real bookings from Supabase
+            window.supabase.from('bookings').select('*, students(name)')
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error("Error fetching bookings:", error);
+                    } else {
+                        console.log("Bookings loaded:", data);
+                        setAllBookings(data || []);
+                    }
+                    setLoading(false);
+                });
+        }, []);
 
         const year  = current.getFullYear();
         const month = current.getMonth();
@@ -215,9 +234,16 @@
             for (let d = 1; d <= remaining; d++)
                 cells.push({ date: new Date(year, month + 1, d), current: false });
 
-        const confirmed = bookings.filter(b => b.status === 'confirmed').length;
-        const pending   = bookings.filter(b => b.status === 'pending').length;
-        const cancelled = bookings.filter(b => b.status === 'cancelled').length;
+        const monthBookings = allBookings.filter(b => {
+            const bDate = new Date(b.year, b.month - 1, b.day);
+            return bDate.getMonth() === month && bDate.getFullYear() === year;
+        });
+
+        const confirmed = monthBookings.filter(b => b.status === 'confirmed').length;
+        const pending   = monthBookings.filter(b => b.status === 'pending').length;
+        const cancelled = monthBookings.filter(b => b.status === 'cancelled').length;
+
+        if (loading) return <div className="page-header"><p>Loading bookings...</p></div>;
 
         return (
             <div>
@@ -231,7 +257,7 @@
                 </div>
 
                 <div className="stats">
-                    {[['orange','fa-calendar-check',bookings.length,'Total This Month'],
+                    {[['orange','fa-calendar-check',monthBookings.length,'Total This Month'],
                       ['green', 'fa-check-circle',  confirmed,      'Confirmed'],
                       ['yellow','fa-clock',          pending,        'Pending'],
                       ['red',   'fa-times-circle',   cancelled,      'Cancelled']
@@ -251,14 +277,14 @@
                         {cells.map(({ date, current: isCurrent }, i) => {
                             const isToday = date.toDateString() === today.toDateString();
                             const dayBookings = isCurrent
-                                ? bookings.filter(b => b.day === date.getDate() && month === today.getMonth() && year === today.getFullYear())
+                                ? monthBookings.filter(b => b.day === date.getDate())
                                 : [];
                             return (
                                 <div key={i} className={`cal-cell${!isCurrent ? ' other-month' : ''}${isToday ? ' today' : ''}`}>
                                     <div className="day-num">{date.getDate()}</div>
                                     {dayBookings.map(b => (
                                         <div key={b.id} className={`booking ${b.status}`} onClick={() => setModal({ b, date })}>
-                                            {b.time} {b.student.split(' ')[0]}
+                                            {b.time} {b.students?.name?.split(' ')[0] || 'Student'}
                                         </div>
                                     ))}
                                 </div>
@@ -271,7 +297,7 @@
                     <div className="modal-overlay open" onClick={e => e.target.classList.contains('modal-overlay') && setModal(null)}>
                         <div className="modal-content">
                             <h3><i className="fa fa-calendar-alt mr-2"></i>Booking Details</h3>
-                            <div className="modal-row"><span>Student</span><span>{modal.b.student}</span></div>
+                            <div className="modal-row"><span>Student</span><span>{modal.b.students?.name || 'Unknown'}</span></div>
                             <div className="modal-row"><span>Course</span><span>{modal.b.course}</span></div>
                             <div className="modal-row"><span>Date</span><span>{modal.date.toLocaleDateString('en-GB', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</span></div>
                             <div className="modal-row"><span>Time</span><span>{modal.b.time}</span></div>
@@ -279,8 +305,6 @@
                                 <span className={`status-badge ${modal.b.status}`}>{modal.b.status.charAt(0).toUpperCase() + modal.b.status.slice(1)}</span>
                             </div>
                             <div className="modal-actions">
-                                <button type="button" className="btn-confirm">Confirm</button>
-                                <button type="button" className="btn-cancel-booking">Cancel</button>
                                 <button type="button" className="btn-close" onClick={() => setModal(null)}>Close</button>
                             </div>
                         </div>
