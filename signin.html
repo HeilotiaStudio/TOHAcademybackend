@@ -82,11 +82,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-// Supabase configuration
-const SUPABASE_URL = "https://lsfkeyjvulvbherwmbbu.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I";
+// Supabase configuration - using a different variable name to avoid conflicts
+const SB_URL = "https://lsfkeyjvulvbherwmbbu.supabase.co";
+const SB_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Create supabase client with a unique name
+const supabaseClient = window.supabase.createClient(SB_URL, SB_ANON_KEY);
 
 /* -----------------------------
    CAPTCHA LOGIC
@@ -147,7 +148,7 @@ async function signinTeacher(email, password) {
     try {
         console.log("Attempting teacher sign-in with Supabase Auth...");
         
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: email,
             password: password
         });
@@ -161,7 +162,7 @@ async function signinTeacher(email, password) {
             console.log("Teacher authenticated:", data.user);
             
             // Get teacher info from teachers table
-            const { data: teacherData, error: teacherError } = await supabase
+            const { data: teacherData, error: teacherError } = await supabaseClient
                 .from('teachers')
                 .select('*')
                 .eq('email', email)
@@ -200,7 +201,7 @@ async function signinStudent(email, password) {
     try {
         console.log("Attempting student sign-in with RPC...");
         
-        const { data, error } = await supabase.rpc('signin_student', {
+        const { data, error } = await supabaseClient.rpc('signin_student', {
             p_email: email,
             p_password: password
         });
