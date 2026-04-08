@@ -515,8 +515,304 @@ function SettingsView() {
     );
 }
 
-      function App() {
-    const [view, setView] = useState('bookings');
+function ProfileView() {
+    const [teacher, setTeacher] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState(false);
+    const [name, setName] = useState('');
+    const [bio, setBio] = useState('');
+    const [message, setMessage] = useState('');
+    const [messageType, setMessageType] = useState('');
+    const [avatarUrl, setAvatarUrl] = useState('');
+
+    useEffect(() => {
+        loadTeacherProfile();
+    }, []);
+
+    const loadTeacherProfile = async () => {
+        try {
+            // Get current user from Supabase Auth
+            const { data: { user } } = await window.supabase.auth.getUser();
+            
+            if (user) {
+                // Fetch teacher data from teachers table
+                const { data, error } = await window.supabase
+                    .from('teachers')
+                    .select('*')
+                    .eq('email', user.email)
+                    .single();
+                
+                if (error) throw error;
+                
+                setTeacher(data);
+                setName(data.name);
+                setBio(data.bio || '');
+                setAvatarUrl(data.avatar_url || '');
+            }
+        } catch (error) {
+            console.error('Error loading profile:', error);
+            setMessageType('error');
+            setMessage('Error loading profile: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        
+        try {
+            const { data: { user } } = await window.supabase.auth.getUser();
+            
+            const { error } = await window.supabase
+                .from('teachers')
+                .update({
+                    name: name,
+                    bio: bio,
+                    avatar_url: avatarUrl
+                })
+                .eq('email', user.email);
+            
+            if (error) throw error;
+            
+            setTeacher({ ...teacher, name, bio, avatar_url: avatarUrl });
+            setEditing(false);
+            setMessageType('success');
+            setMessage('✅ Profile updated successfully!');
+            setTimeout(() => setMessage(''), 3000);
+        } catch (error) {
+            setMessageType('error');
+            setMessage('❌ Error updating profile: ' + error.message);
+        }
+    };
+
+    const getInitials = (name) => {
+        return name ? name.charAt(0).toUpperCase() : 'T';
+    };
+
+    if (loading) {
+        return (
+            <div>
+                <div className="page-header">
+                    <h1 style={{color: '#FF6600'}}>My Profile</h1>
+                </div>
+                <div style={{textAlign: 'center', padding: '50px'}}>Loading profile...</div>
+            </div>
+        );
+    }
+
+    if (!teacher) {
+        return (
+            <div>
+                <div className="page-header">
+                    <h1 style={{color: '#FF6600'}}>My Profile</h1>
+                </div>
+                <div style={{textAlign: 'center', padding: '50px', color: 'red'}}>Profile not found</div>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <div className="page-header">
+                <h1 style={{color: '#FF6600'}}>My Profile</h1>
+            </div>
+            
+            <div style={{maxWidth: '800px', margin: '0 auto'}}>
+                {/* Profile Card */}
+                <div style={{background: '#fff', borderRadius: '15px', padding: '30px', boxShadow: '0 2px 15px rgba(0,0,0,0.08)'}}>
+                    
+                    {/* Profile Header with Avatar */}
+                    <div style={{display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '30px', flexWrap: 'wrap'}}>
+                        <div style={{
+                            width: '120px',
+                            height: '120px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #FF6600, #FF9933)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '48px',
+                            color: 'white',
+                            fontWeight: 'bold'
+                        }}>
+                            {avatarUrl ? (
+                                <img src={avatarUrl} alt={teacher.name} style={{width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover'}} />
+                            ) : (
+                                getInitials(teacher.name)
+                            )}
+                        </div>
+                        
+                        <div>
+                            <h2 style={{margin: '0 0 5px 0', color: '#333'}}>{teacher.name}</h2>
+                            <p style={{margin: '0 0 5px 0', color: '#666'}}>
+                                <i className="fa fa-envelope" style={{color: '#FF6600', marginRight: '8px'}}></i>
+                                {teacher.email}
+                            </p>
+                            <p style={{margin: '0', color: '#666'}}>
+                                <i className="fa fa-briefcase" style={{color: '#FF6600', marginRight: '8px'}}></i>
+                                {teacher.role || 'Instructor'}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {message && (
+                        <div style={{
+                            padding: '10px',
+                            borderRadius: '5px',
+                            marginBottom: '20px',
+                            background: messageType === 'success' ? '#d4edda' : '#f8d7da',
+                            color: messageType === 'success' ? '#155724' : '#721c24',
+                            border: `1px solid ${messageType === 'success' ? '#c3e6cb' : '#f5c6cb'}`
+                        }}>
+                            {message}
+                        </div>
+                    )}
+                    
+                    {!editing ? (
+                        // View Mode
+                        <div>
+                            <div style={{marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #f0f0f0'}}>
+                                <h3 style={{color: '#FF6600', marginTop: 0, marginBottom: '10px'}}>
+                                    <i className="fa fa-info-circle"></i> Bio
+                                </h3>
+                                <p style={{color: '#555', lineHeight: '1.6'}}>{teacher.bio || 'No bio provided yet.'}</p>
+                            </div>
+                            
+                            <button 
+                                onClick={() => setEditing(true)}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    background: '#FF6600',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600',
+                                    fontSize: '16px'
+                                }}
+                                onMouseEnter={(e) => e.target.style.background = '#cc5200'}
+                                onMouseLeave={(e) => e.target.style.background = '#FF6600'}
+                            >
+                                <i className="fa fa-edit"></i> Edit Profile
+                            </button>
+                        </div>
+                    ) : (
+                        // Edit Mode
+                        <form onSubmit={handleUpdateProfile}>
+                            <div style={{marginBottom: '20px'}}>
+                                <label style={{display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500'}}>
+                                    <i className="fa fa-user"></i> Full Name
+                                </label>
+                                <input 
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    required
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        border: '1px solid #ddd',
+                                        borderRadius: '5px',
+                                        fontSize: '14px'
+                                    }}
+                                />
+                            </div>
+                            
+                            <div style={{marginBottom: '20px'}}>
+                                <label style={{display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500'}}>
+                                    <i className="fa fa-picture-o"></i> Avatar URL (optional)
+                                </label>
+                                <input 
+                                    type="text"
+                                    value={avatarUrl}
+                                    onChange={(e) => setAvatarUrl(e.target.value)}
+                                    placeholder="https://example.com/avatar.jpg"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        border: '1px solid #ddd',
+                                        borderRadius: '5px',
+                                        fontSize: '14px'
+                                    }}
+                                />
+                            </div>
+                            
+                            <div style={{marginBottom: '20px'}}>
+                                <label style={{display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500'}}>
+                                    <i className="fa fa-align-left"></i> Bio
+                                </label>
+                                <textarea 
+                                    value={bio}
+                                    onChange={(e) => setBio(e.target.value)}
+                                    rows="4"
+                                    placeholder="Tell us about yourself..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        border: '1px solid #ddd',
+                                        borderRadius: '5px',
+                                        fontSize: '14px',
+                                        fontFamily: 'inherit'
+                                    }}
+                                />
+                            </div>
+                            
+                            <div style={{display: 'flex', gap: '10px'}}>
+                                <button 
+                                    type="submit"
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: '#28a745',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '5px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = '#218838'}
+                                    onMouseLeave={(e) => e.target.style.background = '#28a745'}
+                                >
+                                    <i className="fa fa-save"></i> Save Changes
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        setEditing(false);
+                                        setName(teacher.name);
+                                        setBio(teacher.bio || '');
+                                        setAvatarUrl(teacher.avatar_url || '');
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: '#6c757d',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '5px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = '#5a6268'}
+                                    onMouseLeave={(e) => e.target.style.background = '#6c757d'}
+                                >
+                                    <i className="fa fa-times"></i> Cancel
+                                </button>
+                            </div>
+                        </form>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+        
+function App() {
+    const [view, setView] = useState('profile');  // Changed default to 'profile'
 
     const nav = (v, href, icon, label, badge) => href
         ? <a href={href}><i className={`fa ${icon} mr-2`}></i>{label}</a>
@@ -530,22 +826,24 @@ function SettingsView() {
             <nav className="sidebar">
                 <h2>TOH Academy</h2>
                 {nav(null,       '../index.html', 'fa-home',         'Home')}
-                {nav(null,       'profile.html',  'fa-user',         'My Profile')}
+                {nav('profile',  null,            'fa-user',         'My Profile')}  {/* Changed this line */}
                 {nav('bookings',  null,            'fa-calendar',     'Bookings', 3)}
                 {nav('students',  null,            'fa-users',        'Students')}
                 {nav('courses',   null,            'fa-book',         'Courses')}
-                {nav('settings',  null,            'fa-cog',          'Settings')}  {/* Changed this line */}
+                {nav('settings',  null,            'fa-cog',          'Settings')}
                 {nav(null,       '#',             'fa-sign-out-alt', 'Sign Out')}
             </nav>
             <main>
+                {view === 'profile'   && <ProfileView />}  {/* Add this line */}
                 {view === 'bookings'  && <BookingsView />}
                 {view === 'courses'   && <CoursesView />}
                 {view === 'students'  && <StudentsView />}
-                {view === 'settings'  && <SettingsView />}  {/* Add this line */}
+                {view === 'settings'  && <SettingsView />}
             </main>
         </>
     );
-}  
+}
+     
 
     
 
