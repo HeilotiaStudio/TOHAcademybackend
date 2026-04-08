@@ -25,15 +25,11 @@
         .form-control:disabled { background: #f5f5f5; cursor: not-allowed; }
         .btn-primary { background: #FF6600; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
         .btn-primary:hover { background: #e55a00; transform: translateY(-2px); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; }
         .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
         .close-modal { float: right; font-size: 28px; cursor: pointer; color: #666; transition: 0.3s; }
         .close-modal:hover { color: #FF6600; }
         .loading { text-align: center; padding: 40px; font-size: 18px; color: #666; }
-        .alert { padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; }
-        .alert-error { background: #fee; color: #c00; border: 1px solid #fcc; }
-        .alert-success { background: #efe; color: #0a0; border: 1px solid #cfc; }
         .course-card { background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 15px; }
         .time-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
         .time-slot { padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: white; cursor: pointer; text-align: center; transition: 0.3s; }
@@ -101,92 +97,87 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // CORRECTED Supabase configuration with your actual credentials
+        // Supabase configuration
         const SUPABASE_URL = "https://lsfkeyjvulvbhewmbbu.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZmtleWp2dWx2YmhlcndtYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTI4ODQsImV4cCI6MjA5MDgyODg4NH0.gARtdg8pUgE_o4VJKhC3jB6UHxwXSX3xbdsH-vrpg5I";
         
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentStudent = null;
 
-        // Check authentication on page load
+        // Check authentication - USING CUSTOM SESSION STORAGE (NOT Supabase Auth)
         async function checkAuth() {
             try {
-                console.log('Checking authentication...');
+                // Get student from sessionStorage (your custom auth system)
+                const studentJson = sessionStorage.getItem('student');
                 
-                // Get current session from Supabase Auth
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-                
-                if (sessionError) {
-                    console.error('Session error:', sessionError);
+                if (!studentJson) {
+                    console.log('No student in sessionStorage, redirecting to signin');
                     window.location.href = 'signin.html';
                     return;
                 }
                 
-                if (!session) {
-                    console.log('No active session');
-                    window.location.href = 'signin.html';
-                    return;
-                }
-
-                const userEmail = session.user.email;
-                console.log('User email:', userEmail);
+                const student = JSON.parse(studentJson);
+                console.log('Student found in sessionStorage:', student);
                 
-                // Check if user is a teacher
-                const { data: teacher, error: teacherError } = await supabase
-                    .from('teachers')
-                    .select('*')
-                    .eq('email', userEmail)
-                    .single();
-                
-                if (teacher && !teacherError) {
-                    // User is a teacher - redirect to admin panel
-                    console.log('Teacher detected, redirecting to admin panel');
-                    window.location.href = 'admin.html';
+                // Check if this email is a teacher (redirect to admin)
+                const teacherEmails = ['aivars@tohacademy.com', 'zane@tohacademy.com'];
+                if (teacherEmails.includes(student.email)) {
+                    console.log('Teacher detected, redirecting to admin');
+                    window.location.href = 'https://tohbackend.netlify.app/admin.profile.html';
                     return;
                 }
                 
-                // Check if user is a student
-                const { data: student, error: studentError } = await supabase
+                // Get fresh student data from database
+                const { data: freshStudent, error } = await supabase
                     .from('students')
                     .select('*')
-                    .eq('email', userEmail)
+                    .eq('email', student.email)
                     .single();
                 
-                if (studentError) {
-                    console.error('Student fetch error:', studentError);
-                    await supabase.auth.signOut();
+                if (error) {
+                    console.error('Error fetching student from DB:', error);
+                    document.getElementById('profileContent').innerHTML = `
+                        <div class="error-container">
+                            <h3>Error loading profile</h3>
+                            <p>${error.message}</p>
+                            <button onclick="location.href='signin.html'" class="btn-primary">Sign In Again</button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                if (!freshStudent) {
+                    console.error('Student not found in database');
+                    sessionStorage.removeItem('student');
                     window.location.href = 'signin.html';
                     return;
                 }
                 
-                if (!student) {
-                    console.error('No student found with email:', userEmail);
-                    await supabase.auth.signOut();
-                    window.location.href = 'signin.html';
-                    return;
-                }
-                
-                console.log('Student found:', student);
-                
-                // Student found - load profile
-                currentStudent = student;
+                console.log('Fresh student data:', freshStudent);
+                currentStudent = freshStudent;
                 loadProfile();
                 
-                // Set up sign out
-                document.getElementById('signOutBtn').addEventListener('click', async (e) => {
+                // Sign out handler
+                document.getElementById('signOutBtn').addEventListener('click', (e) => {
                     e.preventDefault();
-                    await supabase.auth.signOut();
+                    sessionStorage.removeItem('student');
                     window.location.href = 'signin.html';
                 });
                 
             } catch (error) {
                 console.error('Auth check error:', error);
-                window.location.href = 'signin.html';
+                document.getElementById('profileContent').innerHTML = `
+                    <div class="error-container">
+                        <h3>Authentication Error</h3>
+                        <p>${error.message}</p>
+                        <button onclick="location.href='signin.html'" class="btn-primary">Sign In Again</button>
+                    </div>
+                `;
             }
         }
 
         // Load student profile
-        async function loadProfile() {
+        function loadProfile() {
             const profileHtml = `
                 <div class="profile-card">
                     <div class="profile-header">
@@ -196,8 +187,8 @@
                         <div>
                             <h2 id="displayName">${escapeHtml(currentStudent.name || 'Student')}</h2>
                             <p id="displayEmail">${escapeHtml(currentStudent.email || '')}</p>
-                            <p><strong>Course:</strong> ${escapeHtml(currentStudent.course || 'Not enrolled')}</p>
-                            <p><strong>Joined:</strong> ${currentStudent.joined_at ? new Date(currentStudent.joined_at).toLocaleDateString() : 'N/A'}</p>
+                            <p><strong>📚 Course:</strong> ${escapeHtml(currentStudent.course || 'Not enrolled')}</p>
+                            <p><strong>📅 Joined:</strong> ${currentStudent.joined_at ? new Date(currentStudent.joined_at).toLocaleDateString() : 'N/A'}</p>
                             <button class="btn-book" onclick="openCalendarModal()">📅 Book a Lesson</button>
                         </div>
                     </div>
@@ -215,7 +206,7 @@
                             <label>Course</label>
                             <input type="text" class="form-control" id="course" value="${escapeHtml(currentStudent.course || 'Not enrolled')}" disabled>
                         </div>
-                        <button class="btn-primary" type="submit">Update Profile</button>
+                        <button class="btn-primary" type="submit">💾 Update Profile</button>
                     </form>
                 </div>
             `;
@@ -241,10 +232,12 @@
                 } else {
                     currentStudent.name = newName;
                     document.getElementById('displayName').textContent = newName;
-                    alert('Profile updated successfully!');
+                    // Update sessionStorage
+                    sessionStorage.setItem('student', JSON.stringify(currentStudent));
+                    alert('✅ Profile updated successfully!');
                 }
                 
-                submitBtn.textContent = 'Update Profile';
+                submitBtn.textContent = '💾 Update Profile';
                 submitBtn.disabled = false;
             });
         }
@@ -264,7 +257,7 @@
                 if (error) throw error;
                 
                 if (!courses || courses.length === 0) {
-                    coursesContent.innerHTML = '<p style="color: #666;">No course information available.</p>';
+                    coursesContent.innerHTML = '<p style="color: #666; text-align: center;">No course information available.</p>';
                     return;
                 }
                 
@@ -277,13 +270,13 @@
                         <p><strong>Rating:</strong> ⭐ ${course.rating} / 5 (${course.reviews} reviews)</p>
                         <p><strong>Students Enrolled:</strong> ${course.students}</p>
                         <button style="width: 100%; padding: 12px; background: #FF6600; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 15px;" onclick="alert('Course content coming soon!')">
-                            Start Learning
+                            🚀 Start Learning
                         </button>
                     </div>
                 `;
             } catch (error) {
                 console.error('Error fetching course:', error);
-                coursesContent.innerHTML = '<p style="color: red;">Error loading course information.</p>';
+                coursesContent.innerHTML = '<p style="color: red; text-align: center;">Error loading course information.</p>';
             }
         }
         
@@ -309,7 +302,7 @@
                 if (error) throw error;
                 
                 if (!bookings || bookings.length === 0) {
-                    bookingsContent.innerHTML = '<p style="color: #666;">No bookings found. Book your first lesson!</p>';
+                    bookingsContent.innerHTML = '<p style="color: #666; text-align: center;">📖 No bookings found. Book your first lesson!</p>';
                     return;
                 }
                 
@@ -323,7 +316,7 @@
                 `).join('');
             } catch (error) {
                 console.error('Error fetching bookings:', error);
-                bookingsContent.innerHTML = '<p style="color: red;">Error loading bookings.</p>';
+                bookingsContent.innerHTML = '<p style="color: red; text-align: center;">Error loading bookings.</p>';
             }
         }
         
@@ -339,54 +332,20 @@
             settingsContent.innerHTML = `
                 <div style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #ddd;">
                     <h4 style="color: #FF6600;">🔐 Change Password</h4>
-                    <form id="passwordForm" style="display: flex; flex-direction: column; gap: 10px;">
-                        <input type="password" id="newPassword" placeholder="New Password" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        <input type="password" id="confirmPassword" placeholder="Confirm Password" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        <button type="submit" style="padding: 10px; background: #FF6600; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Update Password</button>
-                        <p id="passwordMsg" style="margin: 5px 0; font-size: 14px;"></p>
-                    </form>
+                    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Note: Password change requires updating in the database directly or via signin page.</p>
+                    <button onclick="alert('Please contact support to change your password.')" style="width: 100%; padding: 10px; background: #FF6600; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                        Request Password Change
+                    </button>
                 </div>
                 
                 <div>
                     <h4 style="color: #FF6600;">⚠️ Danger Zone</h4>
                     <p style="color: #666; font-size: 14px;">Permanently delete your account and all associated data. This cannot be undone.</p>
-                    <button onclick="deleteAccount()" style="width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Delete My Account</button>
+                    <button onclick="deleteAccount()" style="width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                        🗑️ Delete My Account
+                    </button>
                 </div>
             `;
-            
-            // Handle password change
-            document.getElementById('passwordForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const newPassword = document.getElementById('newPassword').value;
-                const confirmPassword = document.getElementById('confirmPassword').value;
-                const passwordMsg = document.getElementById('passwordMsg');
-                
-                if (newPassword !== confirmPassword) {
-                    passwordMsg.textContent = '❌ Passwords do not match';
-                    passwordMsg.style.color = '#dc3545';
-                    return;
-                }
-                
-                if (newPassword.length < 6) {
-                    passwordMsg.textContent = '❌ Password must be at least 6 characters';
-                    passwordMsg.style.color = '#dc3545';
-                    return;
-                }
-                
-                try {
-                    const { error } = await supabase.auth.updateUser({ password: newPassword });
-                    
-                    if (error) throw error;
-                    
-                    passwordMsg.textContent = '✅ Password updated successfully!';
-                    passwordMsg.style.color = '#28a745';
-                    document.getElementById('passwordForm').reset();
-                    setTimeout(() => { passwordMsg.textContent = ''; }, 3000);
-                } catch (error) {
-                    passwordMsg.textContent = '❌ Error: ' + error.message;
-                    passwordMsg.style.color = '#dc3545';
-                }
-            });
         }
         
         function closeSettingsModal() {
@@ -403,17 +362,17 @@
             }
             
             try {
-                // Delete from students table first (due to foreign key constraints)
-                const { error: studentError } = await supabase
+                // Delete from students table (bookings will cascade delete)
+                const { error } = await supabase
                     .from('students')
                     .delete()
                     .eq('id', currentStudent.id);
                 
-                if (studentError) throw studentError;
+                if (error) throw error;
                 
-                // Sign out after deletion
-                await supabase.auth.signOut();
-                alert('Account deleted successfully.');
+                // Clear session and redirect
+                sessionStorage.removeItem('student');
+                alert('✅ Account deleted successfully.');
                 window.location.href = 'signin.html';
             } catch (error) {
                 alert('Error deleting account: ' + error.message);
@@ -425,14 +384,13 @@
             document.getElementById('calendarModal').style.display = 'block';
             const calendarRoot = document.getElementById('calendar-root');
             
-            // Fetch available dates and render calendar
             calendarRoot.innerHTML = `
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">Select Date:</label>
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">📅 Select Date:</label>
                     <input type="date" id="bookingDate" class="form-control" min="${new Date().toISOString().split('T')[0]}">
                 </div>
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">Select Time:</label>
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">⏰ Select Time:</label>
                     <div class="time-slots" id="timeSlots">
                         ${['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'].map(time => `
                             <div class="time-slot" data-time="${time}">${time}</div>
@@ -440,12 +398,11 @@
                     </div>
                 </div>
                 <div id="bookingMsg" style="margin-bottom: 15px;"></div>
-                <button id="confirmBookingBtn" class="btn-primary" style="width: 100%;">Confirm Booking</button>
+                <button id="confirmBookingBtn" class="btn-primary" style="width: 100%;">✅ Confirm Booking</button>
             `;
             
             let selectedTime = null;
             
-            // Time slot selection
             document.querySelectorAll('.time-slot').forEach(slot => {
                 slot.addEventListener('click', () => {
                     document.querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
@@ -454,17 +411,16 @@
                 });
             });
             
-            // Confirm booking
             document.getElementById('confirmBookingBtn').addEventListener('click', async () => {
                 const date = document.getElementById('bookingDate').value;
                 const bookingMsg = document.getElementById('bookingMsg');
                 
                 if (!date) {
-                    bookingMsg.innerHTML = '<span style="color: red;">Please select a date</span>';
+                    bookingMsg.innerHTML = '<span style="color: red;">❌ Please select a date</span>';
                     return;
                 }
                 if (!selectedTime) {
-                    bookingMsg.innerHTML = '<span style="color: red;">Please select a time</span>';
+                    bookingMsg.innerHTML = '<span style="color: red;">❌ Please select a time</span>';
                     return;
                 }
                 
@@ -483,7 +439,7 @@
                     });
                 
                 if (error) {
-                    bookingMsg.innerHTML = `<span style="color: red;">Booking failed: ${error.message}</span>`;
+                    bookingMsg.innerHTML = `<span style="color: red;">❌ Booking failed: ${error.message}</span>`;
                 } else {
                     bookingMsg.innerHTML = '<span style="color: green;">✅ Booking confirmed! Check "My Bookings" for details.</span>';
                     setTimeout(() => closeCalendarModal(), 2000);
@@ -495,7 +451,6 @@
             document.getElementById('calendarModal').style.display = 'none';
         }
 
-        // Helper function to escape HTML
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, function(m) {
@@ -506,7 +461,7 @@
             });
         }
 
-        // Initialize
+        // Start the app
         checkAuth();
     </script>
 </body>
