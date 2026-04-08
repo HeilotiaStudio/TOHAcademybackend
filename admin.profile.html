@@ -297,7 +297,10 @@
                     <div className="modal-overlay open" onClick={e => e.target.classList.contains('modal-overlay') && setModal(null)}>
                         <div className="modal-content">
                             <h3><i className="fa fa-calendar-alt mr-2"></i>Booking Details</h3>
-                            <div className="modal-row"><span>Student</span><span>{modal.b.students?.name || 'Unknown'}</span></div>
+                            <div className="modal-row">
+    <span style={{color: '#FF6600'}}>Student</span>
+    <span>{modal.b.students?.name || 'Unknown'}</span>
+</div>
                             <div className="modal-row"><span>Course</span><span>{modal.b.course}</span></div>
                             <div className="modal-row"><span>Date</span><span>{modal.date.toLocaleDateString('en-GB', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</span></div>
                             <div className="modal-row"><span>Time</span><span>{modal.b.time}</span></div>
