@@ -523,7 +523,9 @@ function ProfileView() {
     const [bio, setBio] = useState('');
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
-    const [avatarUrl, setAvatarUrl] = useState('');
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState('');
+    const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
         loadTeacherProfile();
@@ -531,11 +533,9 @@ function ProfileView() {
 
     const loadTeacherProfile = async () => {
         try {
-            // Get current user from Supabase Auth
             const { data: { user } } = await window.supabase.auth.getUser();
             
             if (user) {
-                // Fetch teacher data from teachers table
                 const { data, error } = await window.supabase
                     .from('teachers')
                     .select('*')
@@ -547,7 +547,15 @@ function ProfileView() {
                 setTeacher(data);
                 setName(data.name);
                 setBio(data.bio || '');
-                setAvatarUrl(data.avatar_url || '');
+                
+                // Load avatar from Supabase Storage if exists
+                if (data.avatar_url) {
+                    const { data: { publicUrl } } = window.supabase
+                        .storage
+                        .from('teacher-avatars')
+                        .getPublicUrl(data.avatar_url);
+                    setAvatarPreview(publicUrl);
+                }
             }
         } catch (error) {
             console.error('Error loading profile:', error);
@@ -558,6 +566,55 @@ function ProfileView() {
         }
     };
 
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // Check if file is an image
+            if (!file.type.startsWith('image/')) {
+                setMessageType('error');
+                setMessage('Please select an image file (JPEG, PNG, GIF)');
+                return;
+            }
+            
+            setAvatarFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setAvatarPreview(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const uploadAvatar = async () => {
+        if (!avatarFile) return null;
+        
+        setUploading(true);
+        try {
+            const { data: { user } } = await window.supabase.auth.getUser();
+            const fileExt = avatarFile.name.split('.').pop();
+            const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+            
+            // Upload to Supabase Storage
+            const { error: uploadError } = await window.supabase.storage
+                .from('teacher-avatars')
+                .upload(fileName, avatarFile, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+            
+            if (uploadError) throw uploadError;
+            
+            return fileName;
+        } catch (error) {
+            console.error('Upload error:', error);
+            setMessageType('error');
+            setMessage('Error uploading image: ' + error.message);
+            return null;
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setMessage('');
@@ -565,19 +622,30 @@ function ProfileView() {
         try {
             const { data: { user } } = await window.supabase.auth.getUser();
             
+            let avatarPath = teacher?.avatar_url;
+            
+            // Upload new avatar if selected
+            if (avatarFile) {
+                const newAvatarPath = await uploadAvatar();
+                if (newAvatarPath) {
+                    avatarPath = newAvatarPath;
+                }
+            }
+            
             const { error } = await window.supabase
                 .from('teachers')
                 .update({
                     name: name,
                     bio: bio,
-                    avatar_url: avatarUrl
+                    avatar_url: avatarPath
                 })
                 .eq('email', user.email);
             
             if (error) throw error;
             
-            setTeacher({ ...teacher, name, bio, avatar_url: avatarUrl });
+            setTeacher({ ...teacher, name, bio, avatar_url: avatarPath });
             setEditing(false);
+            setAvatarFile(null);
             setMessageType('success');
             setMessage('✅ Profile updated successfully!');
             setTimeout(() => setMessage(''), 3000);
@@ -620,27 +688,49 @@ function ProfileView() {
             </div>
             
             <div style={{maxWidth: '800px', margin: '0 auto'}}>
-                {/* Profile Card */}
                 <div style={{background: '#fff', borderRadius: '15px', padding: '30px', boxShadow: '0 2px 15px rgba(0,0,0,0.08)'}}>
                     
                     {/* Profile Header with Avatar */}
                     <div style={{display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '30px', flexWrap: 'wrap'}}>
-                        <div style={{
-                            width: '120px',
-                            height: '120px',
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #FF6600, #FF9933)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '48px',
-                            color: 'white',
-                            fontWeight: 'bold'
-                        }}>
-                            {avatarUrl ? (
-                                <img src={avatarUrl} alt={teacher.name} style={{width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover'}} />
-                            ) : (
-                                getInitials(teacher.name)
+                        <div style={{textAlign: 'center'}}>
+                            <div style={{
+                                width: '120px',
+                                height: '120px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #FF6600, #FF9933)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '48px',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                overflow: 'hidden'
+                            }}>
+                                {avatarPreview ? (
+                                    <img src={avatarPreview} alt={teacher.name} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                ) : (
+                                    getInitials(teacher.name)
+                                )}
+                            </div>
+                            {editing && (
+                                <label style={{
+                                    display: 'inline-block',
+                                    marginTop: '10px',
+                                    padding: '5px 10px',
+                                    background: '#FF6600',
+                                    color: 'white',
+                                    borderRadius: '5px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px'
+                                }}>
+                                    <i className="fa fa-upload"></i> Change Photo
+                                    <input 
+                                        type="file"
+                                        accept="image/jpeg,image/jpg,image/png,image/gif"
+                                        onChange={handleFileSelect}
+                                        style={{display: 'none'}}
+                                    />
+                                </label>
                             )}
                         </div>
                         
@@ -671,7 +761,6 @@ function ProfileView() {
                     )}
                     
                     {!editing ? (
-                        // View Mode
                         <div>
                             <div style={{marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #f0f0f0'}}>
                                 <h3 style={{color: '#FF6600', marginTop: 0, marginBottom: '10px'}}>
@@ -700,7 +789,6 @@ function ProfileView() {
                             </button>
                         </div>
                     ) : (
-                        // Edit Mode
                         <form onSubmit={handleUpdateProfile}>
                             <div style={{marginBottom: '20px'}}>
                                 <label style={{display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500'}}>
@@ -711,25 +799,6 @@ function ProfileView() {
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     required
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px',
-                                        border: '1px solid #ddd',
-                                        borderRadius: '5px',
-                                        fontSize: '14px'
-                                    }}
-                                />
-                            </div>
-                            
-                            <div style={{marginBottom: '20px'}}>
-                                <label style={{display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500'}}>
-                                    <i className="fa fa-picture-o"></i> Avatar URL (optional)
-                                </label>
-                                <input 
-                                    type="text"
-                                    value={avatarUrl}
-                                    onChange={(e) => setAvatarUrl(e.target.value)}
-                                    placeholder="https://example.com/avatar.jpg"
                                     style={{
                                         width: '100%',
                                         padding: '10px',
@@ -763,6 +832,7 @@ function ProfileView() {
                             <div style={{display: 'flex', gap: '10px'}}>
                                 <button 
                                     type="submit"
+                                    disabled={uploading}
                                     style={{
                                         flex: 1,
                                         padding: '12px',
@@ -770,13 +840,13 @@ function ProfileView() {
                                         color: 'white',
                                         border: 'none',
                                         borderRadius: '5px',
-                                        cursor: 'pointer',
-                                        fontWeight: '600'
+                                        cursor: uploading ? 'not-allowed' : 'pointer',
+                                        fontWeight: '600',
+                                        opacity: uploading ? 0.6 : 1
                                     }}
-                                    onMouseEnter={(e) => e.target.style.background = '#218838'}
-                                    onMouseLeave={(e) => e.target.style.background = '#28a745'}
                                 >
-                                    <i className="fa fa-save"></i> Save Changes
+                                    {uploading ? <i className="fa fa-spinner fa-spin"></i> : <i className="fa fa-save"></i>} 
+                                    {uploading ? ' Uploading...' : ' Save Changes'}
                                 </button>
                                 <button 
                                     type="button"
@@ -784,7 +854,16 @@ function ProfileView() {
                                         setEditing(false);
                                         setName(teacher.name);
                                         setBio(teacher.bio || '');
-                                        setAvatarUrl(teacher.avatar_url || '');
+                                        setAvatarFile(null);
+                                        if (teacher.avatar_url) {
+                                            const { data: { publicUrl } } = window.supabase
+                                                .storage
+                                                .from('teacher-avatars')
+                                                .getPublicUrl(teacher.avatar_url);
+                                            setAvatarPreview(publicUrl);
+                                        } else {
+                                            setAvatarPreview('');
+                                        }
                                     }}
                                     style={{
                                         flex: 1,
@@ -796,8 +875,6 @@ function ProfileView() {
                                         cursor: 'pointer',
                                         fontWeight: '600'
                                     }}
-                                    onMouseEnter={(e) => e.target.style.background = '#5a6268'}
-                                    onMouseLeave={(e) => e.target.style.background = '#6c757d'}
                                 >
                                     <i className="fa fa-times"></i> Cancel
                                 </button>
