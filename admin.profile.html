@@ -321,7 +321,7 @@ function SettingsView() {
             // Sign out
             await window.supabase.auth.signOut();
             alert('✅ Account deleted successfully.');
-            window.location.href = 'https://heilotiastudio.github.io/TOHAcademy//index.html';
+            window.location.href = 'https://heilotiastudio.github.io/TOHAcademy/index.html';
         } catch (error) {
             alert('Error deleting account: ' + error.message);
         }
@@ -821,7 +821,7 @@ function ProfileView() {
 
         
 function App() {
-    const [view, setView] = useState('profile');  // Changed default to 'profile'
+    const [view, setView] = useState('profile');
 
     const nav = (v, href, icon, label, badge) => href
         ? <a href={href}><i className={`fa ${icon} mr-2`}></i>{label}</a>
@@ -834,20 +834,28 @@ function App() {
         <>
             <nav className="sidebar">
                 <h2>TOH Academy</h2>
-                {nav(null,       'https://heilotiastudio.github.io/TOHAcademy/index.html', 'fa-home',  'Home')}
-                {nav('profile',  null,            'fa-user',         'My Profile')}  {/* Changed this line */}
-                {nav('bookings',  null,            'fa-calendar',     'Bookings', 3)}
-                {nav('students',  null,            'fa-users',        'Students')}
-                {nav('courses',   null,            'fa-book',         'Courses')}
-                {nav('settings',  null,            'fa-cog',          'Settings')}
-                {nav(null,       '#',             'fa-sign-out-alt', 'Sign Out')}
+                {nav(null, 'https://heilotiastudio.github.io/TOHAcademy/index.html', 'fa-home', 'Home')}
+                {nav('profile', null, 'fa-user', 'My Profile')}
+                {nav('bookings', null, 'fa-calendar', 'Bookings', 3)}
+                {nav('students', null, 'fa-users', 'Students')}
+                {nav('courses', null, 'fa-book', 'Courses')}
+                {nav('settings', null, 'fa-cog', 'Settings')}
+                {/* Sign Out button - FIXED */}
+                <a href="#" onClick={(e) => {
+                    e.preventDefault();
+                    window.supabase.auth.signOut().then(() => {
+                        window.location.href = 'https://heilotiastudio.github.io/TOHAcademy/index.html';
+                    });
+                }}>
+                    <i className="fa fa-sign-out-alt mr-2"></i>Sign Out
+                </a>
             </nav>
             <main>
-                {view === 'profile'   && <ProfileView />}  {/* Add this line */}
-                {view === 'bookings'  && <BookingsView />}
-                {view === 'courses'   && <CoursesView />}
-                {view === 'students'  && <StudentsView />}
-                {view === 'settings'  && <SettingsView />}
+                {view === 'profile' && <ProfileView />}
+                {view === 'bookings' && <BookingsView />}
+                {view === 'courses' && <CoursesView />}
+                {view === 'students' && <StudentsView />}
+                {view === 'settings' && <SettingsView />}
             </main>
         </>
     );
