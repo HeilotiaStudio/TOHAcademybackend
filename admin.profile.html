@@ -389,7 +389,7 @@ function SettingsView() {
             // Sign out
             await window.supabase.auth.signOut();
             alert('✅ Account deleted successfully.');
-            window.location.href = '../index.html';
+            window.location.href = 'https://heilotiastudio.github.io/TOHAcademy//index.html';
         } catch (error) {
             alert('Error deleting account: ' + error.message);
         }
